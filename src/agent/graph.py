@@ -22,16 +22,14 @@ class Configuration(TypedDict):
     my_configurable_param: str
 
 
-@dataclass
-class State:
+class State(TypedDict):
     """Input state for the agent.
 
     Defines the initial structure of incoming data.
     See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
     """
-
-    changeme: str = "example"
-
+    
+    status: str  # Workflow status (e.g., "monitoring", "retraining")
 
 async def call_model(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """Process input and returns output.
