@@ -133,11 +133,13 @@ def retrain_model(state):
     new_model = xgb.XGBClassifier(**best_params, eval_metric="logloss")
     new_model.fit(X_train, y_train)
     MODEL_ACCURACY = accuracy_score(y_test, new_model.predict(X_test))
-    MODEL_VERSION = "v" + str(int(MODEL_VERSION.split("v")[-1]) + 1)
+    raw = MODEL_VERSION.lstrip("v")           # "1.0"
+    major = int(float(raw))                   # float("1.0") → 1.0 → int → 1
+    MODEL_VERSION = f"v{major + 1}"           # → "v2"
     with mlflow.start_run():
         mlflow.log_params(best_params)
         mlflow.log_metric("new_accuracy", MODEL_ACCURACY)
-        mlflow.xgboost.log_model(xgb_model=model, name="model", signature=signature,)
+        mlflow.xgboost.log_model(xgb_model=new_model, name="model", signature=signature,input_example=input_example)
     return {"status": "deploy"}
 
 def deploy_model(state):
