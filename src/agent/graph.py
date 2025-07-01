@@ -119,7 +119,7 @@ def decide_retrain(state: State) -> Command[Literal["retrain", "__end__"]]:
     """Decide if retraining is needed using an LLM."""
     response = llm.invoke("The model accuracy dropped below the threshold. Should I retrain?")
     value = "retrain" if "yes" in response else "__end__"
-    goto = "deploy" if value == "retrain" else "__end__"
+    goto = "retrain" if value == "retrain" else "__end__"
     return Command(
         update={"status": value},
         goto=goto
@@ -180,6 +180,3 @@ graph = (
     .add_edge("deploy", "__end__")
     .compile(name="Initial Graph")
 )
-
-results = graph.invoke(input={"status": "hello"})
-print(results)
