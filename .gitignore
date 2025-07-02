@@ -165,5 +165,6 @@ uv.lock
 
 # ML Training related things
 **/mlruns
+**/mlartifacts
 
 project_log.md
