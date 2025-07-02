@@ -66,8 +66,8 @@ y = df["diabetes"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Enable MLflow traces
-mlflow.set_tracking_uri("http://127.0.0.1:5000")
-mlflow.set_experiment("auto-tracing-demo")
+# mlflow.set_tracking_uri("http://127.0.0.1:5000")
+# mlflow.set_experiment("auto-tracing-demo")
 
 mlflow.langchain.autolog()
 
@@ -119,13 +119,37 @@ def model_perf(state: State) -> Command[Literal["decide", "__end__"]]:
         goto=goto
     )
 
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import PromptTemplate
+
+class RetrainDecision(BaseModel):
+    retrain: bool = Field(description="Whether the model should be retrained")
+
+json_parser = JsonOutputParser(pydantic_object=RetrainDecision)
+
+prompt_template = PromptTemplate(
+    template="""
+The model accuracy dropped below the threshold.
+Should I retrain the model? Please answer with a JSON object like:
+{format_instructions}
+""",
+    input_variables=[],
+    partial_variables={"format_instructions": json_parser.get_format_instructions()},
+)
+
 def decide_retrain(state: State) -> Command[Literal["retrain", "__end__"]]:
     """Decide if retraining is needed using an LLM."""
-    response = llm.invoke("The model accuracy dropped below the threshold. Should I retrain?")
-    value = "retrain" if "yes" in response else "__end__"
-    goto = "retrain" if value == "retrain" else "__end__"
+    prompt_text = prompt_template.format({}) # don't need to send any input_variables
+    response = llm.invoke(prompt_text)
+    parsed = json_parser.parse(response)
+    retrain_decision = parsed.retrain
+
+    status = "needs_retrain" if retrain_decision else "model_healthy"
+    goto = "retrain" if retrain_decision else "__end__"
+
     return Command(
-        update={"status": value},
+        update={"status": status},
         goto=goto
     )
 
