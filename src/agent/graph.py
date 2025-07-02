@@ -65,7 +65,11 @@ X = df.drop(columns=["diabetes"])
 y = df["diabetes"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+# Enable MLflow traces
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("auto-tracing-demo")
 
+mlflow.langchain.autolog()
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
