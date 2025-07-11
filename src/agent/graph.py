@@ -6,7 +6,8 @@ Returns a predefined response. Replace logic and configuration as needed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, TypedDict, Literal
+from typing import TypedDict, Annotated, Dict, Any
+import operator
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
@@ -21,17 +22,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from langchain_openai import ChatOpenAI
 
-# Unneeded for now
-class Configuration(TypedDict):
-    """Configurable parameters for the agent.
-
-    Set these when creating assistants OR when invoking the graph.
-    See: https://langchain-ai.github.io/langgraph/cloud/how-tos/configuration_cloud/
-    """
-
-    my_configurable_param: str
-
-
 class State(TypedDict):
     """Input state for the agent.
 
@@ -39,7 +29,7 @@ class State(TypedDict):
     See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
     """
     
-    status: str  # Workflow status (e.g., "monitoring", "retraining")
+    status: str   # Workflow status (e.g., "monitoring", "retraining")
 
 async def call_model(state: State, config: RunnableConfig) -> Dict[str, Any]:
     """Process input and returns output.
@@ -179,14 +169,6 @@ def deploy_model(state):
 
 
 
-
-# # Define the graph
-# graph = (
-#     StateGraph(State, config_schema=Configuration)
-#     .add_node(call_model)
-#     .add_edge("__start__", "call_model")
-#     .compile(name="New Graph")
-# )
 
 # Define the graph
 graph = (
