@@ -147,27 +147,6 @@ def wait(state: State) -> dict:
     return {}
 
 
-
-from pydantic import BaseModel, Field
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import PromptTemplate
-
-class RetrainDecision(BaseModel):
-    retrain: bool = Field(description="Whether the model should be retrained")
-
-json_parser = JsonOutputParser(pydantic_object=RetrainDecision)
-
-prompt_template = PromptTemplate(
-    template="""
-The model accuracy dropped below the threshold.
-Should I retrain the model? Please answer with a JSON object like:
-{format_instructions}
-""",
-    input_variables=[],
-    partial_variables={"format_instructions": json_parser.get_format_instructions()},
-)
-
-
 configs = {
     "tune_max_depth": RunnableConfig(configurable={"param_to_tune": "max_depth"}),
     "tune_learning_rate": RunnableConfig(configurable={"param_to_tune": "learning_rate"}),
