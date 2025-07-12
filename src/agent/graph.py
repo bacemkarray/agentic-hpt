@@ -6,7 +6,7 @@ Returns a predefined response. Replace logic and configuration as needed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypedDict, Annotated, Dict, Any
+from typing import TypedDict, Annotated
 import operator
 
 from langchain_core.runnables import RunnableConfig
@@ -21,6 +21,17 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from langchain_openai import ChatOpenAI
+
+# Unneeded for now
+class Configuration(TypedDict):
+    """Configurable parameters for the agent.
+
+    Set these when creating assistants OR when invoking the graph.
+    See: https://langchain-ai.github.io/langgraph/cloud/how-tos/configuration_cloud/
+    """
+
+    my_configurable_param: str
+
 
 class State(TypedDict):
     """Input state for the agent.
@@ -59,7 +70,6 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 # mlflow.set_tracking_uri("http://127.0.0.1:5000")
 # mlflow.set_experiment("auto-tracing-demo")
 
-mlflow.langchain.autolog()
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
@@ -87,12 +97,6 @@ MODEL_ACCURACY = accuracy_score(y_test, model.predict(X_test))
 signature = infer_signature(X_train, model.predict(X_train))
 input_example = X_train.head(3)
 
-
-# Log Model to MLflow
-with mlflow.start_run():
-    mlflow.log_params(best_params)
-    mlflow.log_metric("accuracy", MODEL_ACCURACY)
-    mlflow.xgboost.log_model(xgb_model=model, name="model", signature=signature, input_example=input_example)
 
 from langgraph.types import Command
 
@@ -154,10 +158,6 @@ def retrain_model(state):
     raw = MODEL_VERSION.lstrip("v")           # "1.0"
     major = int(float(raw))                   # float("1.0") → 1.0 → int → 1
     MODEL_VERSION = f"v{major + 1}"           # → "v2"
-    with mlflow.start_run():
-        mlflow.log_params(best_params)
-        mlflow.log_metric("new_accuracy", MODEL_ACCURACY)
-        mlflow.xgboost.log_model(xgb_model=new_model, name="model", signature=signature,input_example=input_example)
     return {"status": "deploy"}
 
 def deploy_model(state):
