@@ -14,15 +14,15 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 
-class ParameterState:
+class ParameterState(TypedDict):
     max_depth: int
     learning_rate: float
     tune_n_estimators: int
     subsample: float
 
-class State(TypedDict):
+class TuningState(TypedDict):
     status: str
-    best_params: Dict[ParameterState]
+    best_params: ParameterState
     best_score: float
     workers_done: Annotated[list, operator.add]
     iteration: int
@@ -40,10 +40,28 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
+def begin_tuning(state: ParameterState) -> TuningState:
+    # Create initial parameters to tune
+    max_depth = state.get("max_depth", 6)
+    learning_rate = state.get("learning_rate", 0.1)
+    n_estimators = state.get("n_estimators", 100)
+    subsample = state.get("subsample", 1.0)
+    
+    best_params = {
+        "max_depth": max_depth,
+        "learning_rate": learning_rate,
+        "n_estimators": n_estimators,
+        "subsample": subsample,
+    }
+    
+    return {
+        "status": "tuning",
+        "best_params": best_params,
+        "best_score": 0.0,  # or some initial value
+        "workers_done": [],
+        "iteration": 0,
+    }
 
-def begin_training(state: ParameterState):
-    s
-    return {"status": "tuning"}
 
 def make_objective(fixed_params: dict, param_to_tune: str):
     def objective(trial):
@@ -161,7 +179,7 @@ def wait(state: State) -> dict:
 
 graph = (
     StateGraph(State)
-    .add_node("start_workers", begin_training)
+    .add_node("start_workers", begin_tuning)
     .add_node("tune_max_depth", make_worker("max_depth"))
     .add_node("tune_learning_rate", make_worker("learning_rate"))
     .add_node("tune_n_estimators", make_worker("n_estimators"))
