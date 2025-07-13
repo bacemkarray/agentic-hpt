@@ -1,16 +1,11 @@
-"""LangGraph single-node graph template.
-
-Returns a predefined response. Replace logic and configuration as needed.
-"""
-
 from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import TypedDict, Annotated, Optional, Dict, Any
 import operator
-
+from typing import TypedDict, Annotated, Optional, Dict, Any, List
+from pydantic import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
+from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
+from langgraph.types import Command
 
 import optuna
 import xgboost as xgb
@@ -18,21 +13,19 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from langchain_openai import ChatOpenAI
 
 
 class State(TypedDict):
-    """Input state for the agent.
-
-    Defines the initial structure of incoming data.
-    See: https://langchain-ai.github.io/langgraph/concepts/low_level/#state
-    """
     status: str
-    best_params: Optional[dict]
-    best_score: Optional[float]
-    workers_done: Optional[list]
-    iteration: Optional[int]
-
+    best_params: Optional[Dict[str, Any]]
+    #     "max_depth": 6,
+    #     "learning_rate": 0.1,
+    #     "n_estimators": 100,
+    #     "subsample": 1.0
+    # })
+    best_score: Optional[float] = 0.0
+    workers_done: Annotated[list, operator.add]
+    iteration: int = 0
 
 # Global Configurations
 DATA_PATH = "src/ml/data/diabetes_prediction_dataset.csv"
@@ -69,26 +62,38 @@ def make_objective(fixed_params: dict, param_to_tune: str):
     return objective
 
 
-def worker_tune(state: State, config: RunnableConfig) -> dict:
-    param_to_tune = config["configurable"]["param_to_tune"]
-    best_params = state.get("best_params") or {
-        "max_depth": 6,
-        "learning_rate": 0.1,
-        "n_estimators": 100,
-        "subsample": 1.0,
-    }
-    objective = make_objective(best_params, param_to_tune)
+def make_worker(param_name: str):
+    def worker(state: State, config: RunnableConfig):
+        return worker_tune(state, config, param_name)
+    return worker
+
+
+def worker_tune(state: State, config: RunnableConfig, param_name: str) -> dict:
+    conf  = config["configurable"]
+    if not conf.get(f"tune_{param_name}", False):
+        # skip tuning this param
+        return {
+            "best_params": state.get("best_params"),
+            "best_score": state.get("best_score"),
+            "workers_done": state.get("workers_done"),
+        }
+
+
+    # If params don't already exist set default params
+    best_params = state.get("best_params", {})
+    objective = make_objective(best_params, param_name)
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
     # Update best params with this worker's best value
     new_best_params = best_params.copy()
-    new_best_params[param_to_tune] = study.best_params[param_to_tune]
-    best_score = study.best_value
+    new_best_params[param_name] = study.best_params[param_name]
+    best_score = max(state.get("best_score", 0.0), study.best_value)
 
     # Track which workers finished
-    workers_done = state.get("workers_done", []).copy()
-    workers_done.add(param_to_tune)
+    workers_done = state.get("workers_done").copy()
+    if param_name not in workers_done:
+        workers_done.append(param_name)
 
     return {
         "best_params": new_best_params,
@@ -96,13 +101,6 @@ def worker_tune(state: State, config: RunnableConfig) -> dict:
         "workers_done": workers_done,
     }
 
-
-
-
-
-
-
-from langgraph.types import Command
 
 def coordinator(state: State) -> Command:
     required_workers = {"max_depth", "learning_rate", "n_estimators", "subsample"}
@@ -125,7 +123,7 @@ def coordinator(state: State) -> Command:
     iteration += 1
 
     # Stopping condition (e.g., max 3 iterations)
-    if iteration >= 3:
+    if iteration >= 1:
         return Command(update={"status": "finalize", "iteration": iteration, "workers_done": workers_done, "best_params": best_params, "best_score": best_score}, 
                        goto="finalize")
 
@@ -134,6 +132,7 @@ def coordinator(state: State) -> Command:
                    goto="start_workers")
 
 
+# Do one last model run
 def finalize(state: State) -> dict:
     best_params = state.get("best_params", {})
     model = xgb.XGBClassifier(**best_params, eval_metric="logloss")
@@ -142,62 +141,37 @@ def finalize(state: State) -> dict:
     print(f"Final model accuracy: {accuracy}")
     return {"status": "__end__", "final_accuracy": accuracy}
 
+
 def wait(state: State) -> dict:
     # No-op, just a placeholder to wait for workers
     return {}
 
 
-configs = {
-    "tune_max_depth": RunnableConfig(configurable={"param_to_tune": "max_depth"}),
-    "tune_learning_rate": RunnableConfig(configurable={"param_to_tune": "learning_rate"}),
-    "tune_n_estimators": RunnableConfig(configurable={"param_to_tune": "n_estimators"}),
-    "tune_subsample": RunnableConfig(configurable={"param_to_tune": "subsample"}),
-}
-
-
 graph = (
     StateGraph(State)
-    .add_node("start_workers", lambda s, c: {"status": "tuning"})  # trigger workers
-    .add_node("tune_max_depth", worker_tune)
-    .add_node("tune_learning_rate", worker_tune)
-    .add_node("tune_n_estimators", worker_tune)
-    .add_node("tune_subsample", worker_tune)
+    .add_node("start_workers", lambda s, c=None: {"status": "tuning"})
+    .add_node("tune_max_depth", make_worker("max_depth"))
+    .add_node("tune_learning_rate", make_worker("learning_rate"))
+    .add_node("tune_n_estimators", make_worker("n_estimators"))
+    .add_node("tune_subsample", make_worker("subsample"))
     .add_node("coordinator", coordinator)
     .add_node("finalize", finalize)
     .add_node("wait", wait)
 
     # Edges
     .add_edge("__start__", "start_workers")
-
-    # Parallel edges from start_workers to all workers
     .add_edge("start_workers", "tune_max_depth")
     .add_edge("start_workers", "tune_learning_rate")
     .add_edge("start_workers", "tune_n_estimators")
     .add_edge("start_workers", "tune_subsample")
-
-    # Workers all go to coordinator
     .add_edge("tune_max_depth", "coordinator")
     .add_edge("tune_learning_rate", "coordinator")
     .add_edge("tune_n_estimators", "coordinator")
     .add_edge("tune_subsample", "coordinator")
-
-    # Coordinator decides next step
-    .add_edge("coordinator", "start_workers")  # loop for next iteration
-    .add_edge("coordinator", "finalize")       # on done
+    .add_edge("coordinator", "start_workers")
+    .add_edge("coordinator", "finalize")
     .add_edge("finalize", "__end__")
-    .add_edge("coordinator", "wait")           # if waiting for workers
+    .add_edge("coordinator", "wait")
     .add_edge("wait", "coordinator")
     .compile(name="Parallel HP Tuning Graph")
 )
-
-
-# result = graph.invoke(
-#     # initial state must include all State keys
-#     {"status": "start",
-#      "best_params": None,
-#      "best_score": None,
-#      "workers_done": [],
-#      "iteration": 0,
-#     },
-#     config=configs
-# )
