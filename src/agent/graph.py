@@ -1,7 +1,6 @@
 from __future__ import annotations
 import operator
 from typing import TypedDict, Annotated, Optional, Dict, Any, List
-from pydantic import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
@@ -15,17 +14,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 
+class ParameterState:
+    max_depth: int
+    learning_rate: float
+    tune_n_estimators: int
+    subsample: float
+
 class State(TypedDict):
     status: str
-    best_params: Optional[Dict[str, Any]]
-    #     "max_depth": 6,
-    #     "learning_rate": 0.1,
-    #     "n_estimators": 100,
-    #     "subsample": 1.0
-    # })
-    best_score: Optional[float] = 0.0
+    best_params: Dict[ParameterState]
+    best_score: float
     workers_done: Annotated[list, operator.add]
-    iteration: int = 0
+    iteration: int
 
 # Global Configurations
 DATA_PATH = "src/ml/data/diabetes_prediction_dataset.csv"
@@ -40,6 +40,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
+
+def begin_training(state: ParameterState):
+    s
+    return {"status": "tuning"}
 
 def make_objective(fixed_params: dict, param_to_tune: str):
     def objective(trial):
@@ -75,7 +79,7 @@ def worker_tune(state: State, config: RunnableConfig, param_name: str) -> dict:
         return {
             "best_params": state.get("best_params"),
             "best_score": state.get("best_score"),
-            "workers_done": state.get("workers_done"),
+            "workers_done": state.get("workers_done")
         }
 
 
@@ -104,13 +108,13 @@ def worker_tune(state: State, config: RunnableConfig, param_name: str) -> dict:
 
 def coordinator(state: State) -> Command:
     required_workers = {"max_depth", "learning_rate", "n_estimators", "subsample"}
-    workers_done = set(state.get("workers_done", []))
+    workers_done = state.get("workers_done", [])
     best_params = state.get("best_params", {})
     best_score = state.get("best_score", 0.0)
     iteration = state.get("iteration", 0)
 
     # Wait until all workers finish
-    if not required_workers.issubset(workers_done):
+    if not required_workers.issubset(set(workers_done)):
         # Still waiting for workers
         return Command(update={}, goto="wait")
 
@@ -124,11 +128,19 @@ def coordinator(state: State) -> Command:
 
     # Stopping condition (e.g., max 3 iterations)
     if iteration >= 1:
-        return Command(update={"status": "finalize", "iteration": iteration, "workers_done": workers_done, "best_params": best_params, "best_score": best_score}, 
+        return Command(update={"status": "finalize", 
+                               "iteration": iteration, 
+                               "workers_done": workers_done, 
+                               "best_params": best_params, 
+                               "best_score": best_score}, 
                        goto="finalize")
 
     # Continue tuning: send to all workers again
-    return Command(update={"status": "tuning", "iteration": iteration, "workers_done": list(workers_done), "best_params": best_params, "best_score": best_score}, 
+    return Command(update={"status": "tuning", 
+                           "iteration": iteration, 
+                           "workers_done": workers_done, 
+                           "best_params": best_params, 
+                           "best_score": best_score}, 
                    goto="start_workers")
 
 
@@ -149,7 +161,7 @@ def wait(state: State) -> dict:
 
 graph = (
     StateGraph(State)
-    .add_node("start_workers", lambda s, c=None: {"status": "tuning"})
+    .add_node("start_workers", begin_training)
     .add_node("tune_max_depth", make_worker("max_depth"))
     .add_node("tune_learning_rate", make_worker("learning_rate"))
     .add_node("tune_n_estimators", make_worker("n_estimators"))
