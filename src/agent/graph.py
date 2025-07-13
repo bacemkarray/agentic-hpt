@@ -14,6 +14,17 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 
+# TEMP ML STUFF
+DATA_PATH = "src/ml/data/diabetes_prediction_dataset.csv"
+
+# Load Dataset
+df = pd.read_csv(DATA_PATH)
+df = pd.get_dummies(df, columns=['smoking_history', 'gender'])
+X = df.drop(columns=["diabetes"])
+y = df["diabetes"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
 class Parameters(TypedDict):
     max_depth: int
     learning_rate: float
@@ -27,31 +38,15 @@ class TuningState(TypedDict):
     workers_done: Annotated[list, operator.add]
     iteration: int
 
-# Global Configurations
-DATA_PATH = "src/ml/data/diabetes_prediction_dataset.csv"
-
-# Load Dataset
-df = pd.read_csv(DATA_PATH)
-df = pd.get_dummies(df, columns=['smoking_history', 'gender'])
-X = df.drop(columns=["diabetes"])
-y = df["diabetes"]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
-def begin_tuning(state: Parameters) -> TuningState:
-    # Get parameters to tune or create if first iteration
-    max_depth = state.get("max_depth", 6)
-    learning_rate = state.get("learning_rate", 0.1)
-    n_estimators = state.get("n_estimators", 100)
-    subsample = state.get("subsample", 1.0)
-    
+def initialize_params(state: Parameters) -> TuningState:
     params = {
-        "max_depth": max_depth,
-        "learning_rate": learning_rate,
-        "n_estimators": n_estimators,
-        "subsample": subsample
+        "max_depth": state.get("max_depth", 6),
+        "learning_rate": state.get("learning_rate", 0.1),
+        "n_estimators": state.get("n_estimators", 100),
+        "subsample": state.get("subsample", 1.0)
     }
     
     return {
@@ -62,6 +57,9 @@ def begin_tuning(state: Parameters) -> TuningState:
         "iteration": 0
     }
 
+def start_workers(state: TuningState) -> TuningState:
+    # Just pass state through without resetting
+    return state
 
 def make_objective(fixed_params: dict, param_to_tune: str):
     def objective(trial):
@@ -91,28 +89,24 @@ def make_worker(param_name: str):
 
 
 def worker_tune(state: TuningState, param_name: str) -> dict:
-    if not conf.get(f"tune_{param_name}", False):
-        # skip tuning this param
-        return {
-            "params": state.get("params"),
-            "score": state.get("score"),
-            "workers_done": state.get("workers_done")
-        }
-
-
-    # If params don't already exist set default params
     params = state["params"]
+    baseline = state["score"]
+    done = state["workers_done"]
+
+    # Create study
     objective = make_objective(params, param_name)
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
     # Update best params with this worker's best value
-    new_params = params.copy()
-    new_params[param_name] = study.params[param_name]
-    score = max(state.get("score", 0.0), study.best_value)
+    best_val   = study.best_params[param_name]
+    best_score = max(baseline, study.best_value)
+
+    new_params = {**params, param_name: best_val}
+    new_workers_done = done + [param_name]
 
     # Track which workers finished
-    workers_done = state["workers_done"].copy()
+    workers_done = state["workers_done"]
     if param_name not in workers_done:
         workers_done.append(param_name)
 
@@ -128,7 +122,7 @@ def coordinator(state: TuningState) -> Command:
     workers_done = state["workers_done"]
     params = state["params"]
     score = state["score"]
-    iteration = state["iteration"]
+    iteration = state["iteration"] + 1
 
     # Wait until all workers finish
     if not required_workers.issubset(set(workers_done)):
@@ -140,8 +134,7 @@ def coordinator(state: TuningState) -> Command:
     # For simplicity, keep score and params from last worker (or implement logic here)
 
     # Reset workers_done for next iteration
-    workers_done.clear()
-    iteration += 1
+    workers_done = []
 
     # Stopping condition (e.g., max 3 iterations)
     if iteration >= 1:
@@ -163,7 +156,7 @@ def coordinator(state: TuningState) -> Command:
 
 # Do one last model run
 def finalize(state: TuningState) -> dict:
-    params = state.get("params", {})
+    params = state["params"]
     model = xgb.XGBClassifier(**params, eval_metric="logloss")
     model.fit(X_train, y_train)
     accuracy = accuracy_score(y_test, model.predict(X_test))
@@ -178,7 +171,8 @@ def wait(state: TuningState) -> dict:
 
 graph = (
     StateGraph(TuningState)
-    .add_node("start_workers", begin_tuning)
+    .add_node("define_parameters", initialize_params)
+    .add_node("start_workers", start_workers)
     .add_node("tune_max_depth", make_worker("max_depth"))
     .add_node("tune_learning_rate", make_worker("learning_rate"))
     .add_node("tune_n_estimators", make_worker("n_estimators"))
@@ -188,7 +182,8 @@ graph = (
     .add_node("wait", wait)
 
     # Edges
-    .add_edge("__start__", "start_workers")
+    .add_edge("__start__", "define_parameters")
+    .add_edge("define_parameters", "start_workers")
     .add_edge("start_workers", "tune_max_depth")
     .add_edge("start_workers", "tune_learning_rate")
     .add_edge("start_workers", "tune_n_estimators")
