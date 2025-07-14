@@ -36,6 +36,7 @@ class TuningState(TypedDict):
     params: Parameters
     score: float
     workers_done: Annotated[list, operator.add]
+    worker_reports: Annotated[dict, operator.add]
     iteration: int
 
 
@@ -63,6 +64,7 @@ def start_workers(state: TuningState) -> TuningState:
 
 def make_objective(fixed_params: dict, param_to_tune: str):
     def objective(trial):
+        # Copy to isolate changes between workers
         params = fixed_params.copy()
         if param_to_tune == "max_depth":
             params["max_depth"] = trial.suggest_int("max_depth", 3, 10)
