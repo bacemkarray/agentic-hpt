@@ -36,7 +36,7 @@ class TuningState(TypedDict):
     params: Parameters
     score: float
     workers_done: Annotated[list, operator.add]
-    worker_reports: Annotated[dict, operator.add]
+    worker_reports: Annotated[list[dict], operator.add]
     iteration: int
 
 
@@ -106,7 +106,7 @@ def worker_tune(state: TuningState, param_name: str) -> dict:
     report = {
         "param":      param_name,
         "best_val":   study.best_params[param_name],
-        "best_score": study.best_value,
+        "best_score": study.best_value
     }
 
     return {
@@ -131,26 +131,33 @@ def coordinator(state: TuningState) -> Command:
     # (Assuming workers update params and score in state)
     # For simplicity, keep score and params from last worker (or implement logic here)
 
-    # Reset workers_done for next iteration
+    reports = state["worker_reports"]
+    baseline = state["score"]
+    
+    # Searches for max value in d of reports, where the key 
+    best = max(reports, key=lambda r: (r["best_score"] - baseline))
+
+    # Build the new global params & score
+    new_params = {**state["params"], best["param"]: best["best_val"]}
+    new_score  = best["best_score"]
+    
+    new_state = {
+      "params":         new_params,
+      "score":          new_score,
+      "workers_done":   [], # clear old workers
+      "worker_reports": [], # clear old reports
+      "iteration":      state["iteration"] + 1
+    }
 
     # Stopping condition
-    if iteration >= 1:
-        return Command(update={"status": "finalize", 
-                               "iteration": iteration, 
-                               "workers_done": workers_done, 
-                               "params": params, 
-                               "score": score}, 
-                       goto="finalize")
+    if iteration >= 2:
+        return Command(update={**new_state, "status": "finalize"},
+                       goto="start_workers")
     
-    workers_done = []
-
+    
     # Continue tuning: send to all workers again
-    return Command(update={"status": "tuning", 
-                           "iteration": iteration, 
-                           "workers_done": workers_done, 
-                           "params": params, 
-                           "score": score}, 
-                   goto="start_workers")
+    return Command(update={**new_state, "status": "tuning"},
+                    goto="tuning")
 
 
 # Do one last model run
