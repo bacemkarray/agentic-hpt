@@ -58,7 +58,7 @@ def initialize_params(state: Parameters) -> TuningState:
     }
 
 def start_workers(state: TuningState) -> TuningState:
-    # Just pass state through without resetting
+    # Just pass state through without resetting anything
     return state
 
 def make_objective(fixed_params: dict, param_to_tune: str):
@@ -96,11 +96,13 @@ def worker_tune(state: TuningState, param_name: str) -> dict:
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
-    # Update best params with this worker's best value
-    best_val   = study.best_params[param_name]
+    # Extract only this worker's parameter from the best_params found in the study
+    best_param   = study.best_params[param_name]
     best_score = max(state["score"], study.best_value)
-
-    new_params = {**params, param_name: best_val}
+    
+    # Keep all params fixed except the one the worker tuned
+    new_params = {**params, param_name: best_param}
+    # Add worker's completion to state
     new_workers_done = state["workers_done"] + [param_name]
 
     return {
@@ -128,7 +130,7 @@ def coordinator(state: TuningState) -> Command:
 
     # Reset workers_done for next iteration
 
-    # Stopping condition (e.g., max 3 iterations)
+    # Stopping condition
     if iteration >= 1:
         return Command(update={"status": "finalize", 
                                "iteration": iteration, 
@@ -165,6 +167,7 @@ def wait(state: TuningState) -> dict:
 
 graph = (
     StateGraph(TuningState)
+    # Nodes
     .add_node("define_parameters", initialize_params)
     .add_node("start_workers", start_workers)
     .add_node("tune_max_depth", make_worker("max_depth"))
