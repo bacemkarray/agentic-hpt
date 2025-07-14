@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 
 
 # TEMP ML STUFF
-DATA_PATH = "src/ml/data/diabetes_prediction_dataset.csv"
+DATA_PATH = "ml/data/diabetes_prediction_dataset.csv"
 
 # Load Dataset
 df = pd.read_csv(DATA_PATH)
@@ -92,25 +92,26 @@ def make_worker(param_name: str):
 
 def worker_tune(state: TuningState, param_name: str) -> dict:
     params = state["params"]
+    reports = state.get("worker_reports", {})
 
     # Create study
     objective = make_objective(params, param_name)
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
-    # Extract only this worker's parameter from the best_params found in the study
-    best_param   = study.best_params[param_name]
-    best_score = max(state["score"], study.best_value)
-    
     # Keep all params fixed except the one the worker tuned
-    new_params = {**params, param_name: best_param}
-    # Add worker's completion to state
-    new_workers_done = state["workers_done"] + [param_name]
+    # new_params = {**params, param_name: best_val}
+    
+    # Extract only this worker's parameter from the best_params found in the study
+    report = {
+        "param":      param_name,
+        "best_val":   study.best_params[param_name],
+        "best_score": study.best_value,
+    }
 
     return {
-        "params": new_params,
-        "score": best_score,
-        "workers_done": new_workers_done
+        "worker_reports": reports + [report],
+        "workers_done": state["workers_done"] + [param_name]
     }
 
 
