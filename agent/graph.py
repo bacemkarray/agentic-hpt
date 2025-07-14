@@ -90,8 +90,6 @@ def make_worker(param_name: str):
 
 def worker_tune(state: TuningState, param_name: str) -> dict:
     params = state["params"]
-    baseline = state["score"]
-    done = state["workers_done"]
 
     # Create study
     objective = make_objective(params, param_name)
@@ -100,20 +98,15 @@ def worker_tune(state: TuningState, param_name: str) -> dict:
 
     # Update best params with this worker's best value
     best_val   = study.best_params[param_name]
-    best_score = max(baseline, study.best_value)
+    best_score = max(state["score"], study.best_value)
 
     new_params = {**params, param_name: best_val}
-    new_workers_done = done + [param_name]
-
-    # Track which workers finished
-    workers_done = state["workers_done"]
-    if param_name not in workers_done:
-        workers_done.append(param_name)
+    new_workers_done = state["workers_done"] + [param_name]
 
     return {
         "params": new_params,
-        "score": score,
-        "workers_done": workers_done,
+        "score": best_score,
+        "workers_done": new_workers_done
     }
 
 
@@ -134,7 +127,6 @@ def coordinator(state: TuningState) -> Command:
     # For simplicity, keep score and params from last worker (or implement logic here)
 
     # Reset workers_done for next iteration
-    workers_done = []
 
     # Stopping condition (e.g., max 3 iterations)
     if iteration >= 1:
@@ -144,6 +136,8 @@ def coordinator(state: TuningState) -> Command:
                                "params": params, 
                                "score": score}, 
                        goto="finalize")
+    
+    workers_done = []
 
     # Continue tuning: send to all workers again
     return Command(update={"status": "tuning", 
