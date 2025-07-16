@@ -125,8 +125,6 @@ def coordinator(state: TuningState):
         return Command(update={}, goto="wait")
 
     iteration = state["iteration"] + 1
-    print(f"Coordinator iteration: {iteration}, status: {state['status']}")
-
 
     reports = state["worker_reports"]
     baseline = state["score"]
@@ -168,8 +166,7 @@ def finalize(state: TuningState):
 
 
 def wait(state: TuningState):
-    # No-op, just a placeholder to wait for workers
-    return {}
+    return Command(goto="coordinator")
 
 from langgraph.graph import START, END
 
@@ -198,10 +195,8 @@ graph = (
     .add_edge("tune_learning_rate", "coordinator")
     .add_edge("tune_n_estimators", "coordinator")
     .add_edge("tune_subsample", "coordinator")
-    # .add_edge("coordinator", "start_workers")
-    # .add_edge("coordinator", "finalize")
     # .add_edge("coordinator", "wait")
-    # .add_edge("wait", "coordinator")
+    .add_edge("wait", "coordinator")
     .add_edge("finalize", END)
     .compile(name="Parallel HP Tuning Graph")
 )
