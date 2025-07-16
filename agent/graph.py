@@ -35,8 +35,8 @@ class TuningState(TypedDict):
     status: str
     params: Parameters
     score: float
-    workers_done: Annotated[list, operator.add]
-    worker_reports: Annotated[list[dict], operator.add]
+    workers_done: Annotated[List, operator.add]
+    worker_reports: Annotated[List, operator.add]
     iteration: int
 
 
@@ -62,7 +62,7 @@ def start_workers(state: TuningState) -> TuningState:
     # Just pass state through without resetting anything
     return state
 
-def make_objective(fixed_params: dict, param_to_tune: str):
+def make_objective(fixed_params: Dict, param_to_tune: str):
     def objective(trial):
         # Copy to isolate changes between workers
         params = fixed_params.copy()
@@ -90,9 +90,9 @@ def make_worker(param_name: str):
     return worker
 
 
-def worker_tune(state: TuningState, param_name: str) -> dict:
+def worker_tune(state: TuningState, param_name: str):
     params = state["params"]
-    reports = state.get("worker_reports", {})
+    reports = state.get("worker_reports", [])
 
     # Create study
     objective = make_objective(params, param_name)
@@ -115,21 +115,18 @@ def worker_tune(state: TuningState, param_name: str) -> dict:
     }
 
 
-def coordinator(state: TuningState) -> Command:
+def coordinator(state: TuningState):
     required_workers = {"max_depth", "learning_rate", "n_estimators", "subsample"}
     workers_done = state["workers_done"]
-    params = state["params"]
-    score = state["score"]
-    iteration = state["iteration"] + 1
 
     # Wait until all workers finish
     if not required_workers.issubset(set(workers_done)):
         # Still waiting for workers
         return Command(update={}, goto="wait")
 
-    # Aggregate: pick best score and params from workers
-    # (Assuming workers update params and score in state)
-    # For simplicity, keep score and params from last worker (or implement logic here)
+    iteration = state["iteration"] + 1
+    print(f"Coordinator iteration: {iteration}, status: {state['status']}")
+
 
     reports = state["worker_reports"]
     baseline = state["score"]
@@ -146,33 +143,35 @@ def coordinator(state: TuningState) -> Command:
       "score":          new_score,
       "workers_done":   [], # clear old workers
       "worker_reports": [], # clear old reports
-      "iteration":      state["iteration"] + 1
+      "iteration":      iteration
     }
 
-    # Stopping condition
+    # Stopping condition (will let LLM decide this in the future)
     if iteration >= 2:
         return Command(update={**new_state, "status": "finalize"},
-                       goto="start_workers")
+                       goto="finalize")
     
     
     # Continue tuning: send to all workers again
-    return Command(update={**new_state, "status": "tuning"},
-                    goto="tuning")
+    return Command(update={**new_state},
+                    goto="start_workers")
 
 
 # Do one last model run
-def finalize(state: TuningState) -> dict:
+def finalize(state: TuningState):
     params = state["params"]
     model = xgb.XGBClassifier(**params, eval_metric="logloss")
     model.fit(X_train, y_train)
     accuracy = accuracy_score(y_test, model.predict(X_test))
     print(f"Final model accuracy: {accuracy}")
-    return {"status": "__end__", "final_accuracy": accuracy}
+    return {}
 
 
-def wait(state: TuningState) -> dict:
+def wait(state: TuningState):
     # No-op, just a placeholder to wait for workers
     return {}
+
+from langgraph.graph import START, END
 
 
 graph = (
@@ -189,7 +188,7 @@ graph = (
     .add_node("wait", wait)
 
     # Edges
-    .add_edge("__start__", "define_parameters")
+    .add_edge(START, "define_parameters")
     .add_edge("define_parameters", "start_workers")
     .add_edge("start_workers", "tune_max_depth")
     .add_edge("start_workers", "tune_learning_rate")
@@ -199,10 +198,20 @@ graph = (
     .add_edge("tune_learning_rate", "coordinator")
     .add_edge("tune_n_estimators", "coordinator")
     .add_edge("tune_subsample", "coordinator")
-    .add_edge("coordinator", "start_workers")
-    .add_edge("coordinator", "finalize")
-    .add_edge("finalize", "__end__")
-    .add_edge("coordinator", "wait")
-    .add_edge("wait", "coordinator")
+    # .add_edge("coordinator", "start_workers")
+    # .add_edge("coordinator", "finalize")
+    # .add_edge("coordinator", "wait")
+    # .add_edge("wait", "coordinator")
+    .add_edge("finalize", END)
     .compile(name="Parallel HP Tuning Graph")
 )
+
+
+initial_input = {
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "n_estimators": 100,
+    "subsample": 1.0,
+}
+
+result = graph.invoke(initial_input)
