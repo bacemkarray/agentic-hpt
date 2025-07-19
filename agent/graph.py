@@ -26,6 +26,18 @@ y = df["diabetes"]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 
+
+#Create experiment id for mlflow
+def get_or_create_experiment(experiment_name):
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+      return experiment.experiment_id
+    else:
+      return mlflow.create_experiment(experiment_name)
+    
+
+
+
+
 class Parameters(TypedDict):
     max_depth: int
     learning_rate: float
@@ -38,6 +50,7 @@ class TuningState(TypedDict):
     score: float
     workers_done: Annotated[List, operator.add]
     iteration: int
+    experiment_id: str
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
@@ -55,7 +68,8 @@ def initialize_params(state: Parameters) -> TuningState:
         "params": params,
         "score": 0.0,
         "workers_done": [],
-        "iteration": 0
+        "iteration": 0,
+        "experiment-id": get_or_create_experiment("Agentic-HPT-Testing") 
     }
 
 def start_workers(state: TuningState) -> TuningState:
@@ -128,23 +142,35 @@ def coordinator(state: TuningState):
         return Command(update={}, goto="wait")
 
     iteration = state["iteration"] + 1
-
     
-    # Searches for max value in d of reports, where the key 
+    experiment_id = state["experiment_id"]  # You should store this in your state
+    runs = mlflow.search_runs(experiment_ids=[experiment_id], output_format="pandas")
+    
+    # Group by tuned_param and find the best run in each group
+    best_per_param = (
+        runs.groupby("tags.tuned_param")
+        .apply(lambda df: df.loc[df["metrics.accuracy"].idxmax()])
+    )
+
+    # Find which parameter's best run had the highest accuracy
+    best_overall = best_per_param.loc[best_per_param["metrics.accuracy"].idxmax()]
+    best_param = best_overall["tags.tuned_param"]
+
+    # Extract the best value for the parameter (params.<param_name>)
+    best_val = best_overall[f"params.{best_param}"]
+    best_score = best_overall["metrics.accuracy"]
 
     # Build the new global params & score
-    # new_params = {**state["params"], best["param"]: best["best_val"]}
-    # new_score  = best["best_score"]
-    
+    new_params = {**state["params"], best_param: best_val}
     new_state = {
-    #   "params":         new_params,
-    #   "score":          new_score,
-      "workers_done":   [], # clear old workers
-      "iteration":      iteration
+        "params": new_params,
+        "score": best_score,
+        "workers_done": [],
+        "iteration": iteration
     }
 
     # Stopping condition (will let LLM decide this in the future)
-    if iteration > 1:
+    if iteration > 2:
         return Command(update={**new_state, "status": "finalize"},
                        goto="finalize")
     
