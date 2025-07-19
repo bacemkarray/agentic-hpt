@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+import mlflow
 
 
 # TEMP ML STUFF
@@ -36,7 +37,6 @@ class TuningState(TypedDict):
     params: Parameters
     score: float
     workers_done: Annotated[List, operator.add]
-    worker_reports: Annotated[List, operator.add]
     iteration: int
 
 
@@ -80,11 +80,23 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
         model = xgb.XGBClassifier(**params, eval_metric="logloss")
         model.fit(X_train, y_train)
         preds = model.predict(X_test)
-        return accuracy_score(y_test, preds)
+        acc = accuracy_score(y_test, preds)
+
+        #mlflow logging
+        with mlflow.start_run(nested=True):
+            mlflow.log_param(param_to_tune, params[param_to_tune])
+            mlflow.log_metrics({"accuracy": acc})
+            mlflow.set_tag("tuned_param", param_to_tune)
+            # Optionally log all fixed params for traceability
+            for k, v in fixed_params.items():
+                mlflow.log_param(f"fixed_{k}", v)
+        return acc
+
     return objective
 
 
 def make_worker(param_name: str):
+
     def worker(state: TuningState):
         return worker_tune(state, param_name)
     return worker
@@ -92,26 +104,17 @@ def make_worker(param_name: str):
 
 def worker_tune(state: TuningState, param_name: str):
     params = state["params"]
-    reports = state.get("worker_reports", [])
 
     # Create study
     objective = make_objective(params, param_name)
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=5)
 
-    # Keep all params fixed except the one the worker tuned
-    # new_params = {**params, param_name: best_val}
-    
-    # Extract only this worker's parameter from the best_params found in the study
-    report = {
-        "param":      param_name,
-        "best_val":   study.best_params[param_name],
-        "best_score": study.best_value
-    }
-
+    best_val = study.best_params.get(param_name)
     return {
-        "worker_reports": reports + [report],
-        "workers_done": state["workers_done"] + [param_name]
+        "workers_done": state["workers_done"] + [param_name],
+        "best_param_value": best_val,
+        "best_score": study.best_value,
     }
 
 
@@ -126,26 +129,22 @@ def coordinator(state: TuningState):
 
     iteration = state["iteration"] + 1
 
-    reports = state["worker_reports"]
-    baseline = state["score"]
     
     # Searches for max value in d of reports, where the key 
-    best = max(reports, key=lambda r: (r["best_score"] - baseline))
 
     # Build the new global params & score
-    new_params = {**state["params"], best["param"]: best["best_val"]}
-    new_score  = best["best_score"]
+    # new_params = {**state["params"], best["param"]: best["best_val"]}
+    # new_score  = best["best_score"]
     
     new_state = {
-      "params":         new_params,
-      "score":          new_score,
+    #   "params":         new_params,
+    #   "score":          new_score,
       "workers_done":   [], # clear old workers
-      "worker_reports": [], # clear old reports
       "iteration":      iteration
     }
 
     # Stopping condition (will let LLM decide this in the future)
-    if iteration >= 2:
+    if iteration > 1:
         return Command(update={**new_state, "status": "finalize"},
                        goto="finalize")
     
