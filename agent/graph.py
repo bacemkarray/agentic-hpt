@@ -143,7 +143,7 @@ def coordinator(state: TuningState):
 
     iteration = state["iteration"] + 1
     
-    experiment_id = state["experiment_id"]  # You should store this in your state
+    experiment_id = state["experiment_id"]
     runs = mlflow.search_runs(experiment_ids=[experiment_id], output_format="pandas")
     
     # Group by tuned_param and find the best run in each group
