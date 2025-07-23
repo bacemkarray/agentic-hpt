@@ -51,7 +51,6 @@ class TuningState(TypedDict):
     workers_done: Annotated[List, operator.add]
     iteration: int
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
 def initialize_params(state: Parameters) -> TuningState:
     params = {
@@ -94,7 +93,7 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
         acc = accuracy_score(y_test, preds)
 
         #mlflow logging
-        with mlflow.start_run(nested=True):
+        with mlflow.start_run(experiment_id=EXPERIMENT_ID):
             mlflow.log_param(param_to_tune, params[param_to_tune])
             mlflow.log_metrics({"accuracy": acc})
             mlflow.set_tag("tuned_param", param_to_tune)
@@ -142,10 +141,6 @@ def coordinator(state: TuningState):
     runs = mlflow.search_runs(output_format="pandas", experiment_ids=[EXPERIMENT_ID], max_results=20)
     
     # Group by tuned_param and find the best run in each group
-    # caution: this doesnt work because the tags arent called "tuned_param." They are called "tuned_param: param_name"
-    # runs.groupby("tags.tuned_param")
-
-    
     best_per_param = (
         runs.groupby("tags.tuned_param")
         .apply(lambda df: df.loc[df["metrics.accuracy"].idxmax()])
