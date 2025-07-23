@@ -34,7 +34,7 @@ def get_or_create_experiment(experiment_name):
     else:
       return mlflow.create_experiment(experiment_name)
     
-
+EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
 
 
 
@@ -50,8 +50,6 @@ class TuningState(TypedDict):
     score: float
     workers_done: Annotated[List, operator.add]
     iteration: int
-    experiment_id: str
-
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
@@ -68,8 +66,7 @@ def initialize_params(state: Parameters) -> TuningState:
         "params": params,
         "score": 0.0,
         "workers_done": [],
-        "iteration": 0,
-        "experiment-id": get_or_create_experiment("Agentic-HPT-Testing") 
+        "iteration": 0
     }
 
 def start_workers(state: TuningState) -> TuningState:
@@ -110,7 +107,6 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
 
 
 def make_worker(param_name: str):
-
     def worker(state: TuningState):
         return worker_tune(state, param_name)
     return worker
@@ -128,7 +124,7 @@ def worker_tune(state: TuningState, param_name: str):
     return {
         "workers_done": state["workers_done"] + [param_name],
         "best_param_value": best_val,
-        "best_score": study.best_value,
+        "best_score": study.best_value
     }
 
 
@@ -143,10 +139,13 @@ def coordinator(state: TuningState):
 
     iteration = state["iteration"] + 1
     
-    experiment_id = state["experiment_id"]
-    runs = mlflow.search_runs(experiment_ids=[experiment_id], output_format="pandas")
+    runs = mlflow.search_runs(output_format="pandas", experiment_ids=[EXPERIMENT_ID], max_results=20)
     
     # Group by tuned_param and find the best run in each group
+    # caution: this doesnt work because the tags arent called "tuned_param." They are called "tuned_param: param_name"
+    # runs.groupby("tags.tuned_param")
+
+    
     best_per_param = (
         runs.groupby("tags.tuned_param")
         .apply(lambda df: df.loc[df["metrics.accuracy"].idxmax()])
@@ -170,7 +169,7 @@ def coordinator(state: TuningState):
     }
 
     # Stopping condition (will let LLM decide this in the future)
-    if iteration > 2:
+    if iteration > 0:
         return Command(update={**new_state, "status": "finalize"},
                        goto="finalize")
     
