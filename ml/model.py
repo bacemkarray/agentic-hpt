@@ -20,12 +20,8 @@ X_val = torch.from_numpy(X_val).float()
 y_train = torch.from_numpy(y_train).long()
 y_val = torch.from_numpy(y_val).long()
 
-def get_loader(X, y, batch_size):
-    ds = TensorDataset(X, y)
-    return DataLoader(ds, batch_size=batch_size, shuffle=True)
 
-# ─── 2. Dynamic MLP Definition ────────────────────────────────────────────────
-
+# MLP Definition
 class TunableMLP(nn.Module):
     def __init__(self, input_dim, num_layers, hidden_dim, dropout):
         super().__init__()
@@ -55,12 +51,17 @@ def train_and_eval(cfg):
     )
     opt = optim.Adam(
         model.parameters(),
-        lr=cfg["lr"]
+        lr=cfg["learning_rate"]
     )
     loss_fn = nn.CrossEntropyLoss()
 
-    train_loader = get_loader(X_train, y_train, cfg["batch_size"])
-    val_loader   = get_loader(X_val, y_val, cfg["batch_size"])
+    train_loader = DataLoader(TensorDataset(X_train, y_train), 
+                              batch_size=32,
+                              shuffle=True)
+    
+    val_loader = DataLoader(TensorDataset(X_val, y_val), 
+                              batch_size=32,
+                              shuffle=True)
 
     EPOCHS = 50
     # fixed-epoch training
@@ -88,7 +89,6 @@ base_cfg = {
     "hidden_dim":   64,
     "dropout":      0.9,
     "lr":           1e-7,
-    "batch_size":   32,
 }
 
 
