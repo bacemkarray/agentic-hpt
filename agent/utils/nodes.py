@@ -56,7 +56,7 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
 
         # Performs training on model for fixed # of epochs
         # Evaluates results and returns accuracy
-        acc = train_and_eval(**params)
+        acc = train_and_eval(params)
 
         #mlflow logging
         with mlflow.start_run(experiment_id=EXPERIMENT_ID):
@@ -141,7 +141,7 @@ def coordinator(state: TuningState):
 # Do one last model run
 def finalize(state: TuningState):
     params = state["params"]
-    final_acc, model = train_and_eval(**params, return_model=True)
+    final_acc, model = train_and_eval(params, return_model=True)
     print(f"Final model accuracy: {final_acc}")
      
     # Save the model and config
