@@ -1,3 +1,6 @@
+from typing import TypedDict, Annotated, Optional, Dict, Any, List
+import operator
+
 class Parameters(TypedDict):
     max_depth: int
     learning_rate: float
