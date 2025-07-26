@@ -1,3 +1,39 @@
+from typing import Dict
+from states import Parameters, TuningState
+from langgraph.types import Command
+
+import optuna
+import xgboost as xgb
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import mlflow
+
+
+#Create experiment id for mlflow
+def get_or_create_experiment(experiment_name):
+    if experiment := mlflow.get_experiment_by_name(experiment_name):
+      return experiment.experiment_id
+    else:
+      return mlflow.create_experiment(experiment_name)
+
+EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
+
+
+
+# TEMP ML STUFF
+DATA_PATH = "ml/data/diabetes_prediction_dataset.csv"
+
+# Load Dataset
+df = pd.read_csv(DATA_PATH)
+df = pd.get_dummies(df, columns=['smoking_history', 'gender'])
+X = df.drop(columns=["diabetes"])
+y = df["diabetes"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+
 def initialize_params(state: Parameters) -> TuningState:
     params = {
         "max_depth": state.get("max_depth", 6),
