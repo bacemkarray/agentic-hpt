@@ -35,10 +35,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 def initialize_params(state: Parameters) -> TuningState:
     params = {
-        "num_layers": state.get("num_layers", 6),
-        "learning_rate": state.get("learning_rate", 0.1),
-        "hidden_dim": state.get("hidden_dim", 100),
-        "dropout": state.get("dropout", 1.0)
+        "num_layers": state.get("num_layers", 2),
+        "learning_rate": state.get("learning_rate", 5e-5),
+        "hidden_dim": state.get("hidden_dim", 24),
+        "dropout": state.get("dropout", 0.5)
     }
     
     return {
