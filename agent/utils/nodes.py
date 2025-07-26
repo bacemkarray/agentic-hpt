@@ -21,18 +21,6 @@ EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing")
 
 
 
-# TEMP ML STUFF
-DATA_PATH = "ml/data/diabetes_prediction_dataset.csv"
-
-# Load Dataset
-df = pd.read_csv(DATA_PATH)
-df = pd.get_dummies(df, columns=['smoking_history', 'gender'])
-X = df.drop(columns=["diabetes"])
-y = df["diabetes"]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-
-
 def initialize_params(state: Parameters) -> TuningState:
     params = {
         "num_layers": state.get("num_layers", 2),
