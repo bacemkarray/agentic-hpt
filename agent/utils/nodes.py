@@ -1,7 +1,6 @@
+from agent.utils.states import Parameters, TuningState
 from typing import Dict
-from states import Parameters, TuningState
 from langgraph.types import Command
-
 import optuna
 import xgboost as xgb
 import pandas as pd
