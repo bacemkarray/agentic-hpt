@@ -1,172 +1,184 @@
-"""
-Optuna example that optimizes multi-layer perceptrons using PyTorch Lightning.
-
-In this example, we optimize the validation accuracy of fashion product recognition using
-PyTorch Lightning, and FashionMNIST. We optimize the neural network architecture. As it is too time
-consuming to use the whole FashionMNIST dataset, we here use a small subset of it.
-
-You can run this example as follows, pruning can be turned on and off with the `--pruning`
-argument.
-    $ python pytorch_lightning_simple.py [--pruning]
-
-"""
-
-import argparse
-import os
-from typing import List
-from typing import Optional
-
-import lightning.pytorch as pl
+import copy
 import optuna
-from optuna.integration import PyTorchLightningPruningCallback
-from packaging import version
 import torch
-from torch import nn
-from torch import optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.utils.data import random_split
-from torchvision import datasets
-from torchvision import transforms
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import TensorDataset, DataLoader
+from sklearn.datasets import load_wine
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
+# ─── 1. Data Prep (Wine) ──────────────────────────────────────────────────────
 
-if version.parse(pl.__version__) < version.parse("1.6.0"):
-    raise RuntimeError("PyTorch Lightning>=1.6.0 is required for this example.")
+data = load_wine()
+X = StandardScaler().fit_transform(data.data)
+y = data.target
 
-PERCENT_VALID_EXAMPLES = 0.1
-BATCHSIZE = 128
-CLASSES = 10
-EPOCHS = 10
-DIR = os.getcwd()
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+X_train = torch.from_numpy(X_train).float()
+X_val   = torch.from_numpy(X_val).float()
+y_train = torch.from_numpy(y_train).long()
+y_val   = torch.from_numpy(y_val).long()
 
+def get_loader(X, y, batch_size):
+    ds = TensorDataset(X, y)
+    return DataLoader(ds, batch_size=batch_size, shuffle=True)
 
-class Net(nn.Module):
-    def __init__(self, dropout: float, output_dims: List[int]) -> None:
+# ─── 2. Dynamic MLP Definition ────────────────────────────────────────────────
+
+class TunableMLP(nn.Module):
+    def __init__(self, input_dim, num_layers, hidden_dim, dropout):
         super().__init__()
-        layers: List[nn.Module] = []
+        layers = []
+        in_dim = input_dim
+        for _ in range(num_layers):
+            layers += [
+                nn.Linear(in_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout)
+            ]
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, 3))  # 3 classes in Wine
+        self.net = nn.Sequential(*layers)
 
-        input_dim: int = 28 * 28
-        for output_dim in output_dims:
-            layers.append(nn.Linear(input_dim, output_dim))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(dropout))
-            input_dim = output_dim
+    def forward(self, x):
+        return self.net(x)
 
-        layers.append(nn.Linear(input_dim, CLASSES))
+# ─── 3. Train/Eval Helper ─────────────────────────────────────────────────────
 
-        self.layers = nn.Sequential(*layers)
-
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        logits = self.layers(data)
-        return F.log_softmax(logits, dim=1)
-
-
-class LightningNet(pl.LightningModule):
-    def __init__(self, dropout: float, output_dims: List[int]) -> None:
-        super().__init__()
-        self.model = Net(dropout, output_dims)
-
-    def forward(self, data: torch.Tensor) -> torch.Tensor:
-        return self.model(data.view(-1, 28 * 28))
-
-    def training_step(self, batch: List[torch.Tensor], batch_idx: int) -> torch.Tensor:
-        data, target = batch
-        output = self(data)
-        return F.nll_loss(output, target)
-
-    def validation_step(self, batch: List[torch.Tensor], batch_idx: int) -> None:
-        data, target = batch
-        output = self(data)
-        pred = output.argmax(dim=1, keepdim=True)
-        accuracy = pred.eq(target.view_as(pred)).float().mean()
-        self.log("val_acc", accuracy)
-        self.log("hp_metric", accuracy, on_step=False, on_epoch=True)
-
-    def configure_optimizers(self) -> optim.Optimizer:
-        return optim.Adam(self.model.parameters())
-
-
-class FashionMNISTDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir: str, batch_size: int):
-        super().__init__()
-        self.data_dir = data_dir
-        self.batch_size = batch_size
-
-    def setup(self, stage: Optional[str] = None) -> None:
-        self.mnist_test = datasets.FashionMNIST(
-            self.data_dir, train=False, download=True, transform=transforms.ToTensor()
-        )
-        mnist_full = datasets.FashionMNIST(
-            self.data_dir, train=True, download=True, transform=transforms.ToTensor()
-        )
-        self.mnist_train, self.mnist_val = random_split(mnist_full, [55000, 5000])
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.mnist_train, batch_size=self.batch_size, shuffle=True, pin_memory=True
-        )
-
-    def val_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.mnist_val, batch_size=self.batch_size, shuffle=False, pin_memory=True
-        )
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.mnist_test, batch_size=self.batch_size, shuffle=False, pin_memory=True
-        )
-
-
-def objective(trial: optuna.trial.Trial) -> float:
-    # We optimize the number of layers, hidden units in each layer and dropouts.
-    n_layers = trial.suggest_int("n_layers", 1, 3)
-    dropout = trial.suggest_float("dropout", 0.2, 0.5)
-    output_dims = [
-        trial.suggest_int("n_units_l{}".format(i), 4, 128, log=True) for i in range(n_layers)
-    ]
-
-    model = LightningNet(dropout, output_dims)
-    datamodule = FashionMNISTDataModule(data_dir=DIR, batch_size=BATCHSIZE)
-
-    trainer = pl.Trainer(
-        logger=True,
-        limit_val_batches=PERCENT_VALID_EXAMPLES,
-        enable_checkpointing=False,
-        max_epochs=EPOCHS,
-        accelerator="auto",
-        devices=1,
-        callbacks=[PyTorchLightningPruningCallback(trial, monitor="val_acc")],
+def train_and_eval(cfg):
+    model = TunableMLP(
+        input_dim=13,
+        num_layers=cfg["num_layers"],
+        hidden_dim=cfg["hidden_dim"],
+        dropout=cfg["dropout"]
     )
-    hyperparameters = dict(n_layers=n_layers, dropout=dropout, output_dims=output_dims)
-    trainer.logger.log_hyperparams(hyperparameters)
-    trainer.fit(model, datamodule=datamodule)
-
-    return trainer.callback_metrics["val_acc"].item()
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="PyTorch Lightning example.")
-    parser.add_argument(
-        "--pruning",
-        "-p",
-        action="store_true",
-        help="Activate the pruning feature. `MedianPruner` stops unpromising "
-        "trials at the early stages of training.",
+    opt = optim.Adam(
+        model.parameters(),
+        lr=cfg["lr"],
+        weight_decay=cfg["weight_decay"]
     )
-    args = parser.parse_args()
+    loss_fn = nn.CrossEntropyLoss()
 
-    pruner = optuna.pruners.MedianPruner() if args.pruning else optuna.pruners.NopPruner()
+    train_loader = get_loader(X_train, y_train, cfg["batch_size"])
+    val_loader   = get_loader(X_val,   y_val,   cfg["batch_size"])
 
-    study = optuna.create_study(direction="maximize", pruner=pruner)
-    study.optimize(objective, n_trials=100, timeout=600)
+    # fixed-epoch training
+    for epoch in range(cfg["epochs"]):
+        model.train()
+        for xb, yb in train_loader:
+            opt.zero_grad()
+            loss_fn(model(xb), yb).backward()
+            opt.step()
 
-    print("Number of finished trials: {}".format(len(study.trials)))
+    # final evaluation
+    model.eval()
+    correct = total = 0
+    with torch.no_grad():
+        for xb, yb in val_loader:
+            preds = model(xb).argmax(dim=1)
+            correct += (preds == yb).sum().item()
+            total   += yb.size(0)
+    return correct / total
 
-    print("Best trial:")
-    trial = study.best_trial
+# ─── 4. Expanded Search Space ─────────────────────────────────────────────────
 
-    print("  Value: {}".format(trial.value))
+search_space = {
+    "num_layers":   [1, 2, 3, 4],
+    "hidden_dim":   [16, 32, 64, 128],
+    "dropout":      [0.0, 0.1, 0.3, 0.5],
+    "lr":           [1e-2, 1e-3, 1e-4],
+    "batch_size":   [16, 32, 64],
+    "weight_decay": [0.0, 1e-4, 1e-3],
+}
 
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
+# ─── 5. Baseline & Tuning Loop ────────────────────────────────────────────────
+
+base_cfg = {
+    "num_layers":   1,
+    "hidden_dim":   64,
+    "dropout":      0.9,
+    "lr":           1e-7,
+    "batch_size":   32,
+    "weight_decay": 1e-2,
+    "epochs":       50,
+}
+
+baseline_acc = train_and_eval(base_cfg)
+print(f"Round 0 — baseline acc: {baseline_acc:.4f}\n")
+
+max_rounds      = 5
+trials_per_param = 5
+
+for rnd in range(1, max_rounds + 1):
+    print(f"=== Round {rnd} ===")
+    best_improve = 0.0
+    best_param   = None
+    best_val     = None
+    best_acc     = baseline_acc
+
+    for param, choices in search_space.items():
+        cfg_snapshot = copy.deepcopy(base_cfg)
+
+        def objective(trial):
+            val = trial.suggest_categorical(param, choices)
+            cfg_snapshot[param] = val
+            return train_and_eval(cfg_snapshot)
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=trials_per_param)
+
+        acc   = study.best_value
+        val   = study.best_params[param]
+        delta = acc - baseline_acc
+        print(f" • {param:10s} → best={val:<6} acc={acc:.4f} Δ={delta:+.4f}")
+
+        if delta > best_improve:
+            best_improve = delta
+            best_param   = param
+            best_val     = val
+            best_acc     = acc
+
+    if best_improve <= 0:
+        print("→ No improvement this round; stopping.\n")
+        break
+
+    base_cfg[best_param] = best_val
+    baseline_acc         = best_acc
+    print(f"→ Committed {best_param} → {best_val}, new baseline acc={baseline_acc:.4f}\n")
+
+# ─── 6. Final Report ─────────────────────────────────────────────────────────
+
+print("=== Final Training ===")
+final_acc = train_and_eval(base_cfg)
+print(f"Final config: {base_cfg}")
+print(f"Final accuracy: {final_acc:.4f}")
+
+print("=== Final Training ===")
+# Re-train and capture the model object
+final_model = TunableMLP(
+    input_dim=13,
+    num_layers=base_cfg["num_layers"],
+    hidden_dim=base_cfg["hidden_dim"],
+    dropout=base_cfg["dropout"]
+)
+opt = optim.Adam(final_model.parameters(),
+                 lr=base_cfg["lr"],
+                 weight_decay=base_cfg["weight_decay"])
+loss_fn = nn.CrossEntropyLoss()
+train_loader = get_loader(X_train, y_train, base_cfg["batch_size"])
+for epoch in range(base_cfg["epochs"]):
+    final_model.train()
+    for xb, yb in train_loader:
+        opt.zero_grad()
+        loss_fn(final_model(xb), yb).backward()
+        opt.step()
+
+checkpoint = {
+    "model_state_dict": final_model.state_dict(),
+    "config": base_cfg
+}
+torch.save(checkpoint, "final_model.pth")
+print("Saved model + config to final_model.pth")
