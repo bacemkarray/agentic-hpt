@@ -1,13 +1,10 @@
 from agent.utils.states import Parameters, TuningState
+from ml.mlp_core import train_and_eval
 from typing import Dict
 from langgraph.types import Command
 import optuna
-import xgboost as xgb
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 import mlflow
+
 
 
 #Create experiment id for mlflow
@@ -56,10 +53,9 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
         else:
             raise ValueError(f"Unknown hyperparameter {param_to_tune}")
 
-        model = xgb.XGBClassifier(**params, eval_metric="logloss")
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
+        # Performs training on model for fixed # of epochs
+        # Evaluates results and returns accuracy
+        acc = train_and_eval(**params)
 
         #mlflow logging
         with mlflow.start_run(experiment_id=EXPERIMENT_ID):
@@ -144,10 +140,8 @@ def coordinator(state: TuningState):
 # Do one last model run
 def finalize(state: TuningState):
     params = state["params"]
-    model = xgb.XGBClassifier(**params, eval_metric="logloss")
-    model.fit(X_train, y_train)
-    accuracy = accuracy_score(y_test, model.predict(X_test))
-    print(f"Final model accuracy: {accuracy}")
+    acc = train_and_eval(**params)
+    print(f"Final model accuracy: {acc}")
     return {}
 
 
