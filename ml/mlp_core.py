@@ -41,7 +41,7 @@ class TunableMLP(nn.Module):
         return self.net(x)
 
 # Train and eval helper
-def train_and_eval(cfg):
+def train_and_eval(cfg, return_model=False):
     model = TunableMLP(
         input_dim=13,
         num_layers=cfg["num_layers"],
@@ -79,7 +79,11 @@ def train_and_eval(cfg):
             preds = model(xb).argmax(dim=1)
             correct += (preds == yb).sum().item()
             total   += yb.size(0)
+    
+    if return_model:
+        return correct/total, model
     return correct / total
+    
 
 # ─── 5. Baseline & Tuning Loop ────────────────────────────────────────────────
 
