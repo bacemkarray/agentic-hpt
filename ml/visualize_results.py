@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 # import your classes
-from proof_2 import TunableMLP, get_loader  
+from model import TunableMLP, get_loader  
 
 # 1. Load checkpoint (weights + config)
 ckpt = torch.load("final_model.pth")
