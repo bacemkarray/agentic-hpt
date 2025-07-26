@@ -40,8 +40,7 @@ class TunableMLP(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-# ─── 3. Train/Eval Helper ─────────────────────────────────────────────────────
-
+# Train and eval helper
 def train_and_eval(cfg):
     model = TunableMLP(
         input_dim=13,
@@ -83,15 +82,6 @@ def train_and_eval(cfg):
     return correct / total
 
 # ─── 5. Baseline & Tuning Loop ────────────────────────────────────────────────
-
-base_cfg = {
-    "num_layers":   1,
-    "hidden_dim":   64,
-    "dropout":      0.9,
-    "lr":           1e-7,
-}
-
-
 
 print("=== Final Training ===")
 final_acc = train_and_eval(base_cfg)
