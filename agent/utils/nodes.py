@@ -35,10 +35,10 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 
 def initialize_params(state: Parameters) -> TuningState:
     params = {
-        "max_depth": state.get("max_depth", 6),
+        "num_layers": state.get("num_layers", 6),
         "learning_rate": state.get("learning_rate", 0.1),
-        "n_estimators": state.get("n_estimators", 100),
-        "subsample": state.get("subsample", 1.0)
+        "hidden_dim": state.get("hidden_dim", 100),
+        "dropout": state.get("dropout", 1.0)
     }
     
     return {
@@ -57,14 +57,14 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
     def objective(trial):
         # Copy to isolate changes between workers
         params = fixed_params.copy()
-        if param_to_tune == "max_depth":
-            params["max_depth"] = trial.suggest_int("max_depth", 3, 10)
+        if param_to_tune == "num_layers":
+            params["num_layers"] = trial.suggest_int("num_layers", 2, 6)
         elif param_to_tune == "learning_rate":
-            params["learning_rate"] = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
-        elif param_to_tune == "n_estimators":
-            params["n_estimators"] = trial.suggest_int("n_estimators", 50, 300)
-        elif param_to_tune == "subsample":
-            params["subsample"] = trial.suggest_float("subsample", 0.5, 1.0)
+            params["learning_rate"] = trial.suggest_float("learning_rate", 5e-5, 5e-2, log=True)
+        elif param_to_tune == "hidden_dim":
+            params["hidden_dim"] = trial.suggest_categorical("hidden_dim", [24, 48, 96, 144, 192, 256])
+        elif param_to_tune == "dropout":
+            params["dropout"] = trial.suggest_categorical("dropout", [0.0, 0.05, 0.15, 0.25, 0.35, 0.5])
         else:
             raise ValueError(f"Unknown hyperparameter {param_to_tune}")
 
@@ -109,7 +109,7 @@ def worker_tune(state: TuningState, param_name: str):
 
 
 def coordinator(state: TuningState):
-    required_workers = {"max_depth", "learning_rate", "n_estimators", "subsample"}
+    required_workers = {"num_layers", "learning_rate", "hidden_dim", "dropout"}
     workers_done = state["workers_done"]
 
     # Wait until all workers finish
@@ -124,7 +124,7 @@ def coordinator(state: TuningState):
     # Group by tuned_param and find the best run in each group
     idx = runs.groupby("tags.tuned_param")["metrics.accuracy"].idxmax()
     best_per_param = runs.loc[idx]
-    
+
     # Find which parameter's best run had the highest accuracy
     best_overall = best_per_param.loc[best_per_param["metrics.accuracy"].idxmax()]
     best_param = best_overall["tags.tuned_param"]
