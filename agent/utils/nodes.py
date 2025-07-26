@@ -122,11 +122,9 @@ def coordinator(state: TuningState):
     runs = mlflow.search_runs(output_format="pandas", experiment_ids=[EXPERIMENT_ID], max_results=20)
     
     # Group by tuned_param and find the best run in each group
-    best_per_param = (
-        runs.groupby("tags.tuned_param")
-        .apply(lambda df: df.loc[df["metrics.accuracy"].idxmax()])
-    )
-
+    idx = runs.groupby("tags.tuned_param")["metrics.accuracy"].idxmax()
+    best_per_param = runs.loc[idx]
+    
     # Find which parameter's best run had the highest accuracy
     best_overall = best_per_param.loc[best_per_param["metrics.accuracy"].idxmax()]
     best_param = best_overall["tags.tuned_param"]
