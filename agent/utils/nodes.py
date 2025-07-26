@@ -149,7 +149,7 @@ def finalize(state: TuningState):
         "model_state_dict": model.state_dict(),
         "config": params
     }
-    torch.save(checkpoint, "final_model.pth")
+    torch.save(checkpoint, "../../ml/final_model.pth")
     print("✅ Saved model + config to final_model.pth")
 
     return {
