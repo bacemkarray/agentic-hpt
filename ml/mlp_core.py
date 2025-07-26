@@ -83,38 +83,3 @@ def train_and_eval(cfg, return_model=False):
     if return_model:
         return correct/total, model
     return correct / total
-    
-
-# ─── 5. Baseline & Tuning Loop ────────────────────────────────────────────────
-
-print("=== Final Training ===")
-final_acc = train_and_eval(base_cfg)
-print(f"Final config: {base_cfg}")
-print(f"Final accuracy: {final_acc:.4f}")
-
-print("=== Final Training ===")
-# Re-train and capture the model object
-final_model = TunableMLP(
-    input_dim=13,
-    num_layers=base_cfg["num_layers"],
-    hidden_dim=base_cfg["hidden_dim"],
-    dropout=base_cfg["dropout"]
-)
-opt = optim.Adam(final_model.parameters(),
-                 lr=base_cfg["lr"],
-                 weight_decay=base_cfg["weight_decay"])
-loss_fn = nn.CrossEntropyLoss()
-train_loader = get_loader(X_train, y_train, base_cfg["batch_size"])
-for epoch in range(base_cfg["epochs"]):
-    final_model.train()
-    for xb, yb in train_loader:
-        opt.zero_grad()
-        loss_fn(final_model(xb), yb).backward()
-        opt.step()
-
-checkpoint = {
-    "model_state_dict": final_model.state_dict(),
-    "config": base_cfg
-}
-torch.save(checkpoint, "final_model.pth")
-print("Saved model + config to final_model.pth")
