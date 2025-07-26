@@ -5,14 +5,14 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-# import your classes
-from model import TunableMLP, get_loader  
+# import classes
+from ml.mlp_core import TunableMLP 
 
 # 1. Load checkpoint (weights + config)
 ckpt = torch.load("final_model.pth")
 cfg = ckpt["config"]
 
-# 2. Re-create the exact same architecture
+# 2. Re-create the model architecture
 model = TunableMLP(
     input_dim=13,
     num_layers=cfg["num_layers"],
