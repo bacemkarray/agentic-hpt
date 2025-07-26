@@ -4,6 +4,7 @@ from typing import Dict
 from langgraph.types import Command
 import optuna
 import mlflow
+import torch
 
 
 
@@ -140,9 +141,21 @@ def coordinator(state: TuningState):
 # Do one last model run
 def finalize(state: TuningState):
     params = state["params"]
-    acc = train_and_eval(**params)
-    print(f"Final model accuracy: {acc}")
-    return {}
+    final_acc, model = train_and_eval(**params, return_model=True)
+    print(f"Final model accuracy: {final_acc}")
+     
+    # Save the model and config
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "config": params
+    }
+    torch.save(checkpoint, "final_model.pth")
+    print("✅ Saved model + config to final_model.pth")
+
+    return {
+        "final_accuracy": final_acc,
+        "saved_path": "final_model.pth"
+    }
 
 
 def wait(state: TuningState):
