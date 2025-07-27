@@ -1,4 +1,4 @@
-from agent.utils.states import Parameters, TuningState
+from agent.utils.states import Parameters, TuningState, ActionOutput
 from ml.mlp_core import train_and_eval
 from typing import Dict
 from langgraph.types import Command
@@ -30,10 +30,11 @@ load_dotenv(dotenv_path=env_path)
 
 # Initialize LLM
 API_KEY = os.getenv("OPENAI_API_KEY")
-llm = ChatOpenAI(temperature=0.2, api_key=API_KEY)
+llm = ChatOpenAI(model="gpt-4o", temperature=0.2, api_key=API_KEY)
+
 
 # Define the JSON output parser
-json_parser = JsonOutputParser()
+json_parser = JsonOutputParser(pydantic_object=ActionOutput)
 
 
 
@@ -156,13 +157,18 @@ def coordinator(state: TuningState):
 
     # Prepare prompt for LLM
     template = """
-    You are an autonomous ML tuning coordinator. 
+    You are an autonomous ML tuning coordinator.
     Your job is to decide whether to continue running tuning iterations or finalize the model.
+
     Current iteration: {iteration}
-    Best accuracy so far: {best_score:.4f}
-    Instructions:
-    If the accuracy is already very high (e.g. above 0.95), or if the model has been tuned for many iterations, you should probably stop.
-    Respond only in JSON format as follows:
+    Best validation accuracy so far: {best_score:.4f}
+
+    Rules:
+    - If accuracy is very high (e.g., greater than 0.95), you must finalize immediately.
+    - The number of iterations does not matter if accuracy is already high.
+    - Otherwise, continue tuning.
+
+    Respond only in JSON format:
     {format_instructions}
     """
 
@@ -178,7 +184,7 @@ def coordinator(state: TuningState):
     response = llm.invoke(formatted_prompt)
     # Parse the JSON output directly
     decision_data = json_parser.invoke(response)
-    decision = decision_data.get("decision", "continue")
+    decision = decision_data.get("action", "continue")
 
     
     # Build the new global params & score
