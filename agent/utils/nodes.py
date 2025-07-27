@@ -168,13 +168,10 @@ def coordinator(state: TuningState):
 
     # Format the prompt
     formatted_prompt = prompt.format(iteration=iteration, best_score=best_score)
-
      # Call the LLM
     response = llm.invoke(formatted_prompt)
-
     # Parse the JSON output directly
     decision_data = json_parser.invoke(response)
-
     decision = decision_data.get("decision", "continue")
 
     
@@ -213,6 +210,7 @@ def finalize(state: TuningState):
     print("✅ Saved model + config to final_model.pth")
 
     return {}
+
 
 
 def wait(state: TuningState):
