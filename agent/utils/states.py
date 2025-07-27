@@ -2,10 +2,10 @@ from typing import TypedDict, Annotated, List
 import operator
 
 class Parameters(TypedDict):
-    max_depth: int
+    num_layers: int
     learning_rate: float
-    tune_n_estimators: int
-    subsample: float
+    hidden_dim: int
+    dropout: float
 
 class TuningState(TypedDict):
     status: str
