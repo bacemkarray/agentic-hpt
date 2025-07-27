@@ -9,6 +9,8 @@ import optuna
 import mlflow
 import torch
 from pathlib import Path
+from dotenv import load_dotenv
+import os
 
 
 
@@ -22,9 +24,13 @@ def get_or_create_experiment(experiment_name):
 EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
 
 
+# Automatically find and load the .env file
+env_path = Path(__file__).resolve().parents[2]/".env"
+load_dotenv(dotenv_path=env_path)
 
 # Initialize LLM
-llm = ChatOpenAI(temperature=0)
+API_KEY = os.getenv("OPENAI_API_KEY")
+llm = ChatOpenAI(temperature=0.2, api_key=API_KEY)
 
 # Define the JSON output parser
 json_parser = JsonOutputParser()
