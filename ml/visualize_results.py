@@ -4,12 +4,15 @@ from sklearn.datasets import load_wine
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from pathlib import Path
 
 # import classes
 from ml.mlp_core import TunableMLP 
 
 # 1. Load checkpoint (weights + config)
-ckpt = torch.load("final_model.pth")
+load_path = Path(__file__).resolve().parent/"final_model.pth"
+print(load_path)
+ckpt = torch.load(load_path)
 cfg = ckpt["config"]
 
 # 2. Re-create the model architecture
