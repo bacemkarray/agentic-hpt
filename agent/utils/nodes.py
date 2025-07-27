@@ -26,6 +26,9 @@ EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing")
 # Initialize LLM
 llm = ChatOpenAI(temperature=0)
 
+# Define the JSON output parser
+json_parser = JsonOutputParser()
+
 
 
 def initialize_params(state: Parameters) -> TuningState:
@@ -148,7 +151,7 @@ def coordinator(state: TuningState):
 
 
     # Prepare prompt for LLM
-    template = f"""
+    template = """
     You are an autonomous ML tuning coordinator. 
     Your job is to decide whether to continue running tuning iterations or finalize the model.
     Current iteration: {iteration}
@@ -159,6 +162,14 @@ def coordinator(state: TuningState):
     {format_instructions}
     """
 
+    prompt = PromptTemplate(
+        template=template,
+        input_variables=["iteration", "best_score"],
+        partial_variables={"format_instructions": json_parser.get_format_instructions()},
+    )
+
+    # Format the prompt
+    formatted_prompt = prompt.format(iteration=iteration, best_score=best_score)
 
     # Stopping condition (will let LLM decide this in the future)
     if iteration > 0:
