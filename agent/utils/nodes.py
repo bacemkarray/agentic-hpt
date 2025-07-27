@@ -5,6 +5,7 @@ from langgraph.types import Command
 import optuna
 import mlflow
 import torch
+from pathlib import Path
 
 
 
@@ -158,7 +159,9 @@ def finalize(state: TuningState):
         "model_state_dict": model.state_dict(),
         "config": params
     }
-    torch.save(checkpoint, "../../ml/final_model.pth")
+
+    save_path = Path(__file__).resolve().parents[2]/"ml"/"final_model.pth"
+    torch.save(checkpoint, save_path)
     print("✅ Saved model + config to final_model.pth")
 
     # return {
