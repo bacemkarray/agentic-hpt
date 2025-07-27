@@ -140,15 +140,6 @@ def coordinator(state: TuningState):
     best_val = param_casts[best_param](best_val_raw)  # type cast
     best_score = best_overall["metrics.accuracy"]
 
-    # Build the new global params & score
-    new_params = {**state["params"], best_param: best_val}
-    new_state = {
-        "params": new_params, # ensures that type is enforced
-        "score": best_score,
-        "workers_done": [],
-        "iteration": iteration
-    }
-
 
     # Prepare prompt for LLM
     template = """
@@ -171,15 +162,30 @@ def coordinator(state: TuningState):
     # Format the prompt
     formatted_prompt = prompt.format(iteration=iteration, best_score=best_score)
 
-    # Stopping condition (will let LLM decide this in the future)
-    if iteration > 0:
-        return Command(update={**new_state, "status": "finalize"},
-                       goto="finalize")
+     # Call the LLM
+    response = llm.invoke(formatted_prompt)
+
+    # Parse the JSON output directly
+    decision_data = json_parser.invoke(response)
+
+    decision = decision_data.get("decision", "continue")
+
     
-    
-    # Continue tuning: send to all workers again
-    return Command(update={**new_state},
-                    goto="start_workers")
+    # Build the new global params & score
+    new_params = {**state["params"], best_param: best_val}
+    new_state = {
+        "status": "finalize" if decision == "finalize" else "tuning",
+        "params": new_params,
+        "score": best_score,
+        "workers_done": [],
+        "iteration": iteration
+    }
+
+    if decision == "finalize":
+        return Command(update=new_state, goto="finalize")
+    else:
+        # Continue tuning: send to all workers again
+        return Command(update=new_state,goto="start_workers")
 
 
 # Do one last model run
