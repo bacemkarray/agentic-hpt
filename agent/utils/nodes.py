@@ -47,9 +47,13 @@ def initialize_params(state: Parameters) -> TuningState:
         "iteration": 0
     }
 
+
+
 def start_workers(state: TuningState) -> TuningState:
     # Just pass state through without resetting anything
     return state
+
+
 
 def make_objective(fixed_params: Dict, param_to_tune: str):
     def objective(trial):
@@ -83,10 +87,12 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
     return objective
 
 
+
 def make_worker(param_name: str):
     def worker(state: TuningState):
         return worker_tune(state, param_name)
     return worker
+
 
 
 def worker_tune(state: TuningState, param_name: str):
@@ -103,6 +109,7 @@ def worker_tune(state: TuningState, param_name: str):
         "best_param_value": best_val,
         "best_score": study.best_value
     }
+
 
 
 def coordinator(state: TuningState):
@@ -186,6 +193,7 @@ def coordinator(state: TuningState):
     else:
         # Continue tuning: send to all workers again
         return Command(update=new_state,goto="start_workers")
+
 
 
 # Do one last model run
