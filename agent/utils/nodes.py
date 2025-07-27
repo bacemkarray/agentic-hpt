@@ -95,6 +95,14 @@ def worker_tune(state: TuningState, param_name: str):
 
 def coordinator(state: TuningState):
     required_workers = {"num_layers", "learning_rate", "hidden_dim", "dropout"}
+    # Type enforcement needed because mlflow's flaw of only returning strings for values
+    param_casts = {
+        "num_layers": int,
+        "hidden_dim": int,
+        "learning_rate": float,
+        "dropout": float
+    }
+
     workers_done = state["workers_done"]
 
     # Wait until all workers finish
@@ -115,13 +123,14 @@ def coordinator(state: TuningState):
     best_param = best_overall["tags.tuned_param"]
 
     # Extract the best value for the parameter (params.<param_name>)
-    best_val = best_overall[f"params.{best_param}"]
+    best_val_raw = best_overall[f"params.{best_param}"]
+    best_val = param_casts[best_param](best_val_raw)  # type cast
     best_score = best_overall["metrics.accuracy"]
 
     # Build the new global params & score
     new_params = {**state["params"], best_param: best_val}
     new_state = {
-        "params": new_params,
+        "params": new_params, # ensures that type is enforced
         "score": best_score,
         "workers_done": [],
         "iteration": iteration
@@ -152,10 +161,11 @@ def finalize(state: TuningState):
     torch.save(checkpoint, "../../ml/final_model.pth")
     print("✅ Saved model + config to final_model.pth")
 
-    return {
-        "final_accuracy": final_acc,
-        "saved_path": "final_model.pth"
-    }
+    # return {
+    #     "final_accuracy": final_acc,
+    #     "saved_path": "final_model.pth"
+    # }
+    return {}
 
 
 def wait(state: TuningState):
