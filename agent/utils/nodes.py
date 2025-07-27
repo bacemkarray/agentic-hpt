@@ -2,6 +2,9 @@ from agent.utils.states import Parameters, TuningState
 from ml.mlp_core import train_and_eval
 from typing import Dict
 from langgraph.types import Command
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import PromptTemplate
 import optuna
 import mlflow
 import torch
@@ -17,6 +20,11 @@ def get_or_create_experiment(experiment_name):
       return mlflow.create_experiment(experiment_name)
 
 EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
+
+
+
+# Initialize LLM
+llm = ChatOpenAI(temperature=0)
 
 
 
@@ -140,19 +148,15 @@ def coordinator(state: TuningState):
 
 
     # Prepare prompt for LLM
-    prompt = f"""
+    template = f"""
     You are an autonomous ML tuning coordinator. 
     Your job is to decide whether to continue running tuning iterations or finalize the model.
     Current iteration: {iteration}
     Best accuracy so far: {best_score:.4f}
     Instructions:
     If the accuracy is already very high (e.g. above 0.95), or if the model has been tuned for many iterations, you should probably stop.
-    Respond only in JSON:
-    ```json
-    {
-    "decision": "continue" | "finalize",
-    "reason": "<short explanation>"
-    }   
+    Respond only in JSON format as follows:
+    {format_instructions}
     """
 
 
