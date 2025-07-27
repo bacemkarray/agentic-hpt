@@ -64,9 +64,9 @@ def make_objective(fixed_params: Dict, param_to_tune: str):
             mlflow.log_param(param_to_tune, params[param_to_tune])
             mlflow.log_metrics({"accuracy": acc})
             mlflow.set_tag("tuned_param", param_to_tune)
-            # Optionally log all fixed params for traceability
-            for k, v in fixed_params.items():
-                mlflow.log_param(f"fixed_{k}", v)
+            # # Optionally log all fixed params for traceability
+            # for k, v in fixed_params.items():
+            #     mlflow.log_param(f"fixed_{k}", v)
         return acc
 
     return objective
@@ -112,6 +112,7 @@ def coordinator(state: TuningState):
         return Command(update={}, goto="wait")
 
     iteration = state["iteration"] + 1
+
     
     runs = mlflow.search_runs(output_format="pandas", experiment_ids=[EXPERIMENT_ID], max_results=20)
     
@@ -136,6 +137,24 @@ def coordinator(state: TuningState):
         "workers_done": [],
         "iteration": iteration
     }
+
+
+    # Prepare prompt for LLM
+    prompt = f"""
+    You are an autonomous ML tuning coordinator. 
+    Your job is to decide whether to continue running tuning iterations or finalize the model.
+    Current iteration: {iteration}
+    Best accuracy so far: {best_score:.4f}
+    Instructions:
+    If the accuracy is already very high (e.g. above 0.95), or if the model has been tuned for many iterations, you should probably stop.
+    Respond only in JSON:
+    ```json
+    {
+    "decision": "continue" | "finalize",
+    "reason": "<short explanation>"
+    }   
+    """
+
 
     # Stopping condition (will let LLM decide this in the future)
     if iteration > 0:
@@ -164,10 +183,6 @@ def finalize(state: TuningState):
     torch.save(checkpoint, save_path)
     print("✅ Saved model + config to final_model.pth")
 
-    # return {
-    #     "final_accuracy": final_acc,
-    #     "saved_path": "final_model.pth"
-    # }
     return {}
 
 
