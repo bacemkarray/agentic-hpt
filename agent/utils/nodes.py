@@ -24,14 +24,6 @@ def get_or_create_experiment(experiment_name):
 EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
 
 
-# Automatically find and load the .env file
-env_path = Path(__file__).resolve().parents[2]/".env"
-load_dotenv(dotenv_path=env_path)
-
-# Initialize LLM
-API_KEY = os.getenv("OPENAI_API_KEY")
-llm = ChatOpenAI(model="gpt-4o", temperature=0.2, api_key=API_KEY)
-
 
 # Define the JSON output parser
 json_parser = JsonOutputParser(pydantic_object=ActionOutput)
@@ -177,6 +169,8 @@ def coordinator(state: TuningState):
         input_variables=["iteration", "best_score"],
         partial_variables={"format_instructions": json_parser.get_format_instructions()},
     )
+    
+    llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
     # Format the prompt
     formatted_prompt = prompt.format(iteration=iteration, best_score=best_score)
