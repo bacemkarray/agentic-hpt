@@ -9,9 +9,6 @@ import optuna
 import mlflow
 import torch
 from pathlib import Path
-from dotenv import load_dotenv
-import os
-
 
 
 #Create experiment id for mlflow
@@ -22,11 +19,6 @@ def get_or_create_experiment(experiment_name):
       return mlflow.create_experiment(experiment_name)
 
 EXPERIMENT_ID = get_or_create_experiment("Agentic-HPT-Testing") 
-
-
-
-# Define the JSON output parser
-json_parser = JsonOutputParser(pydantic_object=ActionOutput)
 
 
 
@@ -146,6 +138,9 @@ def coordinator(state: TuningState):
     best_val = param_casts[best_param](best_val_raw)  # type cast
     best_score = best_overall["metrics.accuracy"]
 
+
+    # Define the JSON output parser
+    json_parser = JsonOutputParser(pydantic_object=ActionOutput)
 
     # Prepare prompt for LLM
     template = """
