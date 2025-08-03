@@ -42,3 +42,5 @@ This decision is guided by a prompt-enforced policy:
 ## 🧩 Graph Structure
 
 <img width="815" height="497" alt="image" src="https://github.com/user-attachments/assets/d8f421ab-1e90-4f1a-adfb-21c6b9939341" />
+
+<img width="808" height="511" alt="image" src="https://github.com/user-attachments/assets/2c1fa26c-91aa-4565-99ef-502c1b829942" />
