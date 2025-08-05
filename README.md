@@ -78,7 +78,7 @@ langgraph dev
 
 ## What's Next
 
-While this project already demonstrates a modular, agentic tuning pipeline, there are several natural extensions that could evolve it further - either for future iterations or as inspiration for follow-up work:
+While this project already demonstrates a modular, agentic tuning pipeline, there are a few extensions that could evolve it further:
 
 ### Distributed Multi-Objective Optimization
 The current system uses per-parameter parallelism, which is modular but optimizes each hyperparameter in isolation. This can miss interdependencies. For example, the ideal `learning_rate` may depend on the selected `num_layers`. A future version could use Optuna’s joint optimization capabilities (e.g. via `Optuna's RDB backend`) to tune parameters in combination, capturing cross-parameter effects and better exploring the joint search space. This would also enable training deeper models or working with more complex datasets, where tuning sensitivity and parameter interactions becomes more critical.
@@ -88,12 +88,6 @@ The current graph statically defines one node per parameter, which is straightfo
 
 ### Smarter Coordinator Agent
 The coordinator currently makes stop decisions based on current best accuracy. Future prompts could incorporate trend analysis, time-based constraints, or even allow the LLM to recommend which parameters to freeze or prioritize next - expanding agentic behavior beyond binary decisions.
-
-### Model-Aware Decisions
-Right now, the LLM sees only final accuracy values. With better MLflow tooling integration, the agent could gain access to deeper insights. Things like loss curves, validation variance, or learning dynamics would enable more informed reasoning.
-
-### Beyond Tuning: Deployment Agents
-This framework currently stops at training. It could be extended into a post-tuning deployment pipeline where an agent decides whether to deploy the trained model, run explainability tools, or perform fairness audits before promotion.
 
 ---
 
