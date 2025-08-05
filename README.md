@@ -51,7 +51,7 @@ This decision is guided by a prompt-enforced policy, where if accuracy exceeds a
 
 ### Installation
 ```bash
-git clone https://github.com/<your-org>/agentic-hpt.git
+git clone https://github.com/bacemkarray/agentic-hpt.git
 cd agentic-hpt
 pip install -r requirements.txt
 ```
