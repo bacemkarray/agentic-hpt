@@ -41,5 +41,41 @@ This decision is guided by a prompt-enforced policy, where if accuracy exceeds a
 
 <img width="808" height="511" alt="image" src="https://github.com/user-attachments/assets/2c1fa26c-91aa-4565-99ef-502c1b829942" />
 
+---
+
+## Getting Started
+
+### Prerequisites
+- Python 3.11+ recommended
+- A valid `OPENAI_API_KEY`
+- (Optional) A valid `LANGSMITH_API_KEY` if you want to track runs on LangSmith
+
+### Installation
+```bash
+git clone https://github.com/<your-org>/agentic-hpt.git
+cd agentic-hpt
+pip install -r requirements.txt
+```
+
+### Usage
+
+You can invoke the graph in two ways:
+
+#### ✅ Run it as a Python script
+This directly launches the full tuning loop from the terminal:
+
+```bash
+python agent/graph.py
+```
+
+Use it with LangGraph Studio (Optional)
+If you want to visualize and interact with the graph via LangGraph Studio:
+
+```bash
+langgaph dev
+```
+
+---
+
 
 ## What's Next
