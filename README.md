@@ -9,9 +9,9 @@ An autonomous hyperparameter tuning framework orchestrated via LangGraph. This s
 This project demonstrates a modular and extensible architecture for agent-driven hyperparameter tuning. It leverages:
 
 - **LangGraph** for node orchestration and communication
+- **PyTorch** for model training and eval
 - **Optuna** for optimization
 - **MLflow** for tracking
-- **PyTorch** for model training and eval
 
 ---
 
