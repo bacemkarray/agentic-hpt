@@ -25,18 +25,17 @@ graph = (
     .add_edge("tune_learning_rate", "coordinator")
     .add_edge("tune_hidden_dim", "coordinator")
     .add_edge("tune_dropout", "coordinator")
-    # .add_edge("coordinator", "wait")
     .add_edge("wait", "coordinator")
     .add_edge("finalize", END)
     .compile(name="Parallel HP Tuning Graph")
 )
 
+# Uncomment and edit this (as needed) if you wish to run the graph here.
+# initial_input = {
+#     "num_layers": 6,
+#     "learning_rate": 0.1,
+#     "hidden_dim": 100,
+#     "dropout": 1.0,
+# }
 
-initial_input = {
-    "num_layers": 6,
-    "learning_rate": 0.1,
-    "hidden_dim": 100,
-    "dropout": 1.0,
-}
-
-result = graph.invoke(initial_input)
+# result = graph.invoke(initial_input)
